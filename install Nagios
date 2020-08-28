@@ -1,0 +1,182 @@
+How to install and configure Nagios in UABntu There are a lot of articles on the web, but there are a few glitches, 
+and today I'm here to give you the correct way to install and configure Nagios in Ubantu.
+如何在uabntu中安裝配置Nagios網上的文章很多，但是都有一些小問題，今天給大家帶來正確的在ubantu中安裝配置Nagios。
+
+一 、安裝PHP和Apache
+
+$ sudo apt-get update
+$ sudo apt-get install wget build-essential unzip openssl libssl-dev
+$ sudo apt-get install apache2 php libapache2-mod-php php-gd libgd-dev 
+
+二、為Nagios創建用戶和組
+
+接下來，為Nagios創建一個新用戶，並為他們分配一個密碼：
+$ sudo adduser nagios_user
+
+現在，我們將為Nagios創建一個組，我們將其稱為nagcmd，並將剛剛創建的用戶添加到該組中。
+$ sudo groupadd nagcmd
+$ sudo usermod -a -G nagcmd nagios_user
+
+我們還將用戶添加到Apache組中。
+$ sudo usermod -a -G nagcmd www-data
+
+三、 安裝Nagios Binaries
+$ cd /var     #喜歡裝在那個目錄下你自己決定
+$ sudo wget https://github.com/NagiosEnterprises/nagioscore/releases/download/nagios-4.4.3/nagios-4.4.3.tar.gz
+$ sudo tar xzf nagios-4.4.3.tar.gz
+
+解壓縮歸檔文件後，導航到源目錄並使用以下make命令安裝Nagios以及一些其他要求
+cd nagios-4.4.3
+# useradd nagios
+# mkdir /usr/local/nagios
+# chown nagios.nagios /usr/local/nagios
+上面這幾步必須做，不然make install會報錯
+$ sudo ./configure --with-command-group=nagcmd
+$ sudo make all
+$ sudo make install
+$ sudo make install-init
+$ sudo make install-daemoninit
+$ sudo make install-config
+$ sudo make install-webconf
+$ sudo make install-commandmode
+$ sudo make install-exfoliation
+
+
+現在，我們需要將事件處理程序腳本複製到libexec目錄中。
+這些為Nagios Web界面提供了多個事件觸發器。
+$ sudo cp -R contrib/eventhandlers/ /usr/local/nagios/libexec/
+$ sudo chown -R nagios:nagios /usr/local/nagios/libexec/eventhandlers
+
+
+四、使用身份驗證網關設置Apache
+現在，我們將為Nagios設置Apache虛擬主機，並且為了保護我們的Web界面，
+我們將設置身份驗證網關以防止未經授權的訪問。
+
+我們將為Nagios創建一個Apache配置文件：
+$ sudo vim /etc/apache2/conf-available/nagios.conf
+复制下面的内容
+# SAMPLE CONFIG SNIPPETS FOR APACHE WEB SERVER
+# Last Modified: 11-26-2005
+#
+# This file contains examples of entries that need
+# to be incorporated into your Apache web server
+# configuration file. Customize the paths, etc. as
+# needed to fit your system.
+ScriptAlias /nagios/cgi-bin "/usr/local/nagios/sbin"
+<Directory "/usr/local/nagios/sbin">
+# SSLRequireSSL
+Options ExecCGI
+AllowOverride None
+Order allow,deny
+Allow from all
+# Order deny,allow
+# Deny from all
+# Allow from 127.0.0.1
+AuthName "Nagios Access"
+AuthType Basic
+AuthUserFile /usr/local/nagios/etc/htpasswd.users
+Require valid-user
+</Directory>
+Alias /nagios "/usr/local/nagios/share"
+<Directory "/usr/local/nagios/share">
+# SSLRequireSSL
+Options None
+AllowOverride None
+Order allow,deny
+Allow from all
+# Order deny,allow
+# Deny from all
+# Allow from 127.0.0.1
+AuthName "Nagios Access"
+AuthType Basic
+AuthUserFile /usr/local/nagios/etc/htpasswd.users
+Require valid-user
+</Directory>
+
+完成後，保存並關閉文件。
+
+現在我們可以設置身份驗證網關。我們將使用user nagiosadmin。
+這是我們可以用來進行身份驗證的默認用戶，而要使用其他用戶，則需要進行進一步配置。
+$ sudo htpasswd -c /usr/local/nagios/etc/htpasswd.users nagiosadmin
+
+現在啟用Apache配置並重新啟動它，以使更改生效：
+$ sudo a2enconf nagios
+$ sudo a2enmod cgi rewrite
+$ sudo service apache2 restart
+
+
+五、安裝Nagios插件
+安裝和配置了Nagios之後，我們就可以下載並安裝最新版本的nagios-plugins。
+為此，請nagios-plugins從此處檢索最新版本的鏈接。在撰寫本文時，
+最新版本為nagios-plugins-2.2.1.tar.gz。之後，將目錄更改為/var，下載，
+解壓縮並導航到其文件夾。
+$ cd /var
+$ sudo wget http://www.nagios-plugins.org/download/nagios-plugins-2.2.1.tar.gz
+$ sudo tar xzf nagios-plugins-2.2.1.tar.gz
+$ cd nagios-plugins-2.2.1
+
+現在我們編譯安裝nagios-plugins：
+$ sudo ./configure --with-nagios-user=nagios --with-nagios-group=nagios --with-openssl
+$ sudo make
+$ sudo make install
+
+六、驗證並啟動Nagios
+$ sudo /usr/local/nagios/bin/nagios -v /usr/local/nagios/etc/nagios.cfg
+
+顯示如下內容說明沒有錯
+Nagios Core 4.4.3
+Copyright (c) 2009-present Nagios Core Development Team and Community Contributors
+Copyright (c) 1999-2009 Ethan Galstad
+Last Modified: 2019-01-15
+License: GPL
+
+Website: https://www.nagios.org
+Reading configuration data...
+   Read main config file okay...
+   Read object config files okay...
+
+Running pre-flight check on configuration data...
+
+Checking objects...
+        Checked 8 services.
+        Checked 1 hosts.
+        Checked 1 host groups.
+        Checked 0 service groups.
+        Checked 1 contacts.
+        Checked 1 contact groups.
+        Checked 24 commands.
+        Checked 5 time periods.
+        Checked 0 host escalations.
+        Checked 0 service escalations.
+Checking for circular paths...
+        Checked 1 hosts
+        Checked 0 service dependencies
+        Checked 0 host dependencies
+        Checked 5 timeperiods
+Checking global event handlers...
+Checking obsessive compulsive processor commands...
+Checking misc settings...
+
+Total Warnings: 0
+Total Errors:   0
+
+Things look okay - No serious problems were detected during the pre-flight check
+
+啟動Nagios：
+$ service nagios start
+
+配置為在系統啟動時啟動：
+$ sudo systemctl enable nagios
+
+步驟7 –訪問Nagios Web界面
+
+現在，您可以通過在瀏覽器中訪問主機名或IP地址，然後訪問以下內容來訪問Nagios Web界面/nagios：
+https://your_server_IP_or_domain/nagios
+
+Congratulations! You have successfully installed and configured the Nagios Server side. If you want to use it further, you need to install the Nagios Client side.
+If it works for you, please share it!
+
+恭喜你已經成功安裝和配置了Nagios server端，如果想進一步使用還需要安裝Nagios client端。
+如果對你有用請分享！
+
+
